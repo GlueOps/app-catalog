@@ -7,7 +7,6 @@ import json
 import uvicorn
 import os
 
-# Constants
 ARGOCD_API_GROUP = 'argoproj.io'
 ARGOCD_API_VERSION = 'v1alpha1'
 ARGOCD_PLURAL = 'applications'
@@ -77,6 +76,5 @@ def get_apps():
     except ApiException as e:
         return Response(content=json.dumps({"error": str(e)}), status_code=500)
 
-# Main entry point to run the app
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
