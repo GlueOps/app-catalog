@@ -49,10 +49,14 @@ def parse_images(image_list):
 
 def parse_app_data(app):
     """Parses individual ArgoCD app data into a structured format."""
+    app_name = app["metadata"]["name"]
+    namespace = app["metadata"]["namespace"]
+    captain_domain = os.getenv("CAPTAIN_DOMAIN")
     res_app = {
-        "app_name": app["metadata"]["name"],
+        "app_name": app_name,
         "argocd_status": app["status"]["health"]["status"],
-        "last_updated_at": app["status"]["operationState"]["finishedAt"]
+        "last_updated_at": app["status"]["operationState"]["finishedAt"],
+        "app_link": "argocd.{captain_domain}/applications/{namespace}/{app_name}".format(captain_domain=captain_domain, namespace=namespace, app_name=app_name),
     }
 
     if "externalURLs" in app["status"]["summary"]:
