@@ -104,7 +104,6 @@ def parse_app_data(app):
 @app.get("/apps")
 def get_apps():
     """API endpoint to fetch and return ArgoCD apps."""
-    load_kube_config()
     try:
         apps_data = fetch_argocd_apps()
         parsed_apps = [parse_app_data(app) for app in apps_data]
@@ -114,5 +113,6 @@ def get_apps():
         return Response(content=json.dumps({"error": str(e)}), status_code=500)
 
 if __name__ == "__main__":
+    load_kube_config()
     uvicorn.run(app, host="0.0.0.0")
     
