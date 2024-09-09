@@ -1,6 +1,8 @@
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from fastapi import FastAPI, Response
+from fastapi import Request
+from contextlib import contextmanager
 import glueops.setup_logging
 import re
 import json
@@ -15,24 +17,46 @@ ARGOCD_PLURAL = 'applications'
 app = FastAPI()
 logger = glueops.setup_logging.configure(level=os.environ.get('LOG_LEVEL', 'WARNING'))
 
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {exc}")
+
+@contextmanager
 def load_kube_config():
     """Loads Kubernetes configuration."""
     try:
-        config.load_kube_config()
-    except Exception as e:
-        logger.error(f"Error loading kubeconfig: {e}")
-        raise
+        config.load_incluster_config()
+        logger.info("Loaded in-cluster kubeconfig")
+    except config.ConfigException:
+        try:
+            config.load_kube_config()
+            logger.info("Loaded local kubeconfig")
+        except Exception as e:
+            logger.error(f"Error loading kubeconfig: {e}")
+            raise
 
 def fetch_argocd_apps():
-    """Fetches all ArgoCD applications using the Kubernetes API."""
+    """Fetch all ArgoCD applications using pagination."""
     custom_api = client.CustomObjectsApi()
+    continue_token = None
+    all_apps = []
+
     try:
-        return custom_api.list_cluster_custom_object(
-            ARGOCD_API_GROUP, ARGOCD_API_VERSION, ARGOCD_PLURAL
-        )
+        while True:
+            response = custom_api.list_cluster_custom_object(
+                ARGOCD_API_GROUP, ARGOCD_API_VERSION, ARGOCD_PLURAL,
+                limit=100,  
+                _continue=continue_token 
+            )
+            all_apps.extend(response.get('items', []))
+            continue_token = response.get('metadata', {}).get('continue')
+            if not continue_token:
+                break
     except ApiException as e:
         logger.error(f"Error fetching ArgoCD applications: {e}")
         raise
+
+    return all_apps
 
 def parse_images(image_list):
     """Parses image list and extracts image information."""
@@ -45,40 +69,50 @@ def parse_images(image_list):
                 "tag": match.group(2),
                 "sha": match.group(3) if match.group(3) else "No SHA provided"
             })
+        else:
+            logger.warning(f"Unexpected image format: {image}")
     return images
 
 def parse_app_data(app):
     """Parses individual ArgoCD app data into a structured format."""
-    app_name = app["metadata"]["name"]
-    namespace = app["metadata"]["namespace"]
-    captain_domain = os.getenv("CAPTAIN_DOMAIN")
-    res_app = {
-        "app_name": app_name,
-        "argocd_status": app["status"]["health"]["status"],
-        "last_updated_at": app["status"]["operationState"]["finishedAt"],
-        "app_link": "argocd.{captain_domain}/applications/{namespace}/{app_name}".format(captain_domain=captain_domain, namespace=namespace, app_name=app_name),
-    }
-
-    if "externalURLs" in app["status"]["summary"]:
-        res_app["external_urls"] = app["status"]["summary"]["externalURLs"]
-
-    if "images" in app["status"]["summary"]:
-        res_app["images"] = parse_images(app["status"]["summary"]["images"])
-
-    return res_app
+    required_keys = ["metadata", "status"]
+    if not all(key in app for key in required_keys):
+        logger.error(f"Missing required keys in app data: {app}")
+        return None
+    
+    try:
+        app_name = app["metadata"]["name"]
+        namespace = app["metadata"]["namespace"]
+        captain_domain = os.getenv("CAPTAIN_DOMAIN")
+        res_app = {
+            "app_name": app_name,
+            "argocd_status": app["status"]["health"]["status"],
+            "last_updated_at": app["status"]["operationState"]["finishedAt"],
+            "app_link": "argocd.{captain_domain}/applications/{namespace}/{app_name}".format(captain_domain=captain_domain, namespace=namespace, app_name=app_name),
+        }
+        if "externalURLs" in app["status"].get("summary", {}):
+            res_app["external_urls"] = app["status"]["summary"]["externalURLs"]
+            
+        if "images" in app["status"].get("summary", {}):
+            res_app["images"] = parse_images(app["status"]["summary"]["images"])
+ 
+        return res_app
+    except KeyError as e:
+        logger.error(f"KeyError while parsing app data: {e}")
+        return None
 
 @app.get("/apps")
 def get_apps():
     """API endpoint to fetch and return ArgoCD apps."""
     load_kube_config()
-    
     try:
         apps_data = fetch_argocd_apps()
-        parsed_apps = [parse_app_data(app) for app in apps_data.get('items', [])]
+        parsed_apps = [parse_app_data(app) for app in apps_data]
         response_data = {"apps": parsed_apps}
         return Response(content=json.dumps(response_data), media_type="application/json")
     except ApiException as e:
         return Response(content=json.dumps({"error": str(e)}), status_code=500)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0")
+    
