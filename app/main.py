@@ -12,6 +12,7 @@ import os
 ARGOCD_API_GROUP = 'argoproj.io'
 ARGOCD_API_VERSION = 'v1alpha1'
 ARGOCD_PLURAL = 'applications'
+PAGINATION_LIMIT = 100
 
 # Initialize FastAPI app and logger
 app = FastAPI()
@@ -45,7 +46,7 @@ def fetch_argocd_apps():
         while True:
             response = custom_api.list_cluster_custom_object(
                 ARGOCD_API_GROUP, ARGOCD_API_VERSION, ARGOCD_PLURAL,
-                limit=100,  
+                limit=PAGINATION_LIMIT,  
                 _continue=continue_token 
             )
             all_apps.extend(response.get('items', []))
@@ -88,7 +89,7 @@ def parse_app_data(app):
             "app_name": app_name,
             "argocd_status": app["status"]["health"]["status"],
             "last_updated_at": app["status"]["operationState"]["finishedAt"],
-            "app_link": "argocd.{captain_domain}/applications/{namespace}/{app_name}".format(captain_domain=captain_domain, namespace=namespace, app_name=app_name),
+            "app_link": f"argocd.{captain_domain}/applications/{namespace}/{app_name}",
         }
         if "externalURLs" in app["status"].get("summary", {}):
             res_app["external_urls"] = app["status"]["summary"]["externalURLs"]
