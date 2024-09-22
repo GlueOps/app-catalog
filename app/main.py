@@ -1,9 +1,8 @@
-from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 from fastapi import FastAPI, Response
 from fastapi import Request
-from contextlib import contextmanager
 import glueops.setup_logging
+import glueops.setup_kubernetes
 import re
 import json
 import uvicorn
@@ -22,23 +21,11 @@ logger = glueops.setup_logging.configure(level=os.environ.get('LOG_LEVEL', 'WARN
 async def generic_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {exc}")
 
-@contextmanager
-def load_kube_config():
-    """Loads Kubernetes configuration."""
-    try:
-        config.load_incluster_config()
-        logger.info("Loaded in-cluster kubeconfig")
-    except config.ConfigException:
-        try:
-            config.load_kube_config()
-            logger.info("Loaded local kubeconfig")
-        except Exception as e:
-            logger.error(f"Error loading kubeconfig: {e}")
-            raise
+# setting cluster config
+v1, custom_api = glueops.setup_kubernetes.load_kubernetes_config(logger)
 
 def fetch_argocd_apps():
     """Fetch all ArgoCD applications using pagination."""
-    custom_api = client.CustomObjectsApi()
     continue_token = None
     all_apps = []
 
@@ -114,6 +101,5 @@ def get_apps():
         return Response(content=json.dumps({"error": str(e)}), status_code=500)
 
 if __name__ == "__main__":
-    load_kube_config()
     uvicorn.run(app, host="0.0.0.0")
     
