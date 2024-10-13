@@ -6,4 +6,4 @@ COPY . /app/app-catalog
 
 RUN pip3 install -r app-catalog/requirements.txt
 
-CMD ["python", "-u", "/app/app-catalog/main.py"]
+CMD ["python", "-u", "/app/app-catalog/app/main.py"]
