@@ -76,7 +76,7 @@ def parse_app_data(app):
             "app_name": app_name,
             "argocd_status": app["status"]["health"]["status"],
             "last_updated_at": app["status"]["operationState"]["finishedAt"],
-            "app_link": f"argocd.{captain_domain}/applications/{namespace}/{app_name}",
+            "app_link": f"https://argocd.{captain_domain}/applications/{namespace}/{app_name}",
         }
         if "externalURLs" in app["status"].get("summary", {}):
             res_app["external_urls"] = app["status"]["summary"]["externalURLs"]
