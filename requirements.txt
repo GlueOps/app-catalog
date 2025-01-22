@@ -1,4 +1,4 @@
-fastapi==0.112.2
+fastapi==0.115.6
 kubernetes==30.1.0
 pytest==8.3.4
 glueops-helpers @ https://github.com/GlueOps/python-glueops-helpers-library/archive/refs/tags/v0.4.1.zip
